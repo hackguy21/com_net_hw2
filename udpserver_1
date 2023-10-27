@@ -6,7 +6,7 @@
 #pragma comment(lib,"ws2_32")	//윈속 라이브러리 참조
 
 #define _CRT_SECURE_NO_WARNINGS
-#define BUF_SIZE 30
+#define BUF_SIZE 100
 
 
 int main(int argc, char* argv[])
@@ -62,7 +62,9 @@ int main(int argc, char* argv[])
 		// 서버소켓과, 데이터를 저장할 버퍼, 버퍼사이즈, 
 		strLen = recvfrom(servSock, message, BUF_SIZE, 0, (SOCKADDR*)&clntAdr, &clntAdrSz);
 		// recvfrom을 통해 클라이언트로 부터 받은 데이터를 반환
-		sendto(servSock, "hi\n", 4, 0, (SOCKADDR*)&clntAdr, sizeof(clntAdr));
+		//char return_message[BUF_SIZE];
+		//strcpy_s(return_message, BUF_SIZE, message);
+		sendto(servSock, message, strLen, 0, (SOCKADDR*)&clntAdr, sizeof(clntAdr));
 	}
 
 	// 4. socket 닫기
