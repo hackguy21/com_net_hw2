@@ -1,72 +1,72 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <winsock2.h>			//윈속 헤더파일 포함
-#pragma comment(lib,"ws2_32")	//윈속 라이브러리 참조
+#include <WinSock2.h>
 
-#define _CRT_SECURE_NO_WARNINGS
-#define BUF_SIZE 30
+#pragma comment(lib, "ws2_32.lib")
 
-
-int main(int argc, char* argv[])
-{
-	
-	WSADATA wsadata; // Windows 소켓 DLL, 윈도우에서 지원하는 소켓DLL관련 개체
-	SOCKET servSock;
-	char message[BUF_SIZE];
-	int strLen;
-	int clntAdrSz;
-	SOCKADDR_IN servAdr, clntAdr;
-
-	if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) {
-		fputs("wsastartup() error\n", stderr);
-		exit(1);
-	}
+#define BUF_SIZE    100
+#define IP_ADDR     "127.0.0.1"
 
 
-	// 1.socket을 생성
+int main() {
 
-	servSock = socket(PF_INET, SOCK_DGRAM, 0);	
-	// PF_INET = IPv4를 사용한 주소체계사용
-	// UDP 소켓생성 SOCK_DGRAM <-> TCP 소켓생성 SOCK_STREAM
-	if (servSock == INVALID_SOCKET) { // 소켓 생성실패 예외처리
-		WSACleanup();
-		fputs("upd 소켓 생성 실패\n", stderr);
-		exit(1);
-	}
+    // 'https://learn.microsoft.com/ko-kr/windows/win32/winsock/creating-a-socket-for-the-server' 참조
+    // 소켓
+    WSADATA wsadata;
+    SOCKET sock;
+    SOCKADDR_IN servAdr;
+    char message[BUF_SIZE];
+    int strLen;
+
+    // 윈도우 운영체제에서 소켓dll 생성 실패 예외처리
+    if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) {
+        fputs("wsastartup() error\n", stderr);
+        exit(1);
+    }
+
+    // 소켓 설정, SOCK_DGRAM으로 안하여 UDP로 설정됨.
+    sock = socket(PF_INET, SOCK_DGRAM, 0);
+    if (sock == INVALID_SOCKET) {
+        WSACleanup();
+        fputs("upd 소켓 생성 실패\n", stderr);
+        exit(1);
+    }
+
+    // 소켓에 들어갈 주소정보 설정
+
+    memset(&servAdr, 0, sizeof(servAdr));
+    servAdr.sin_family = AF_INET; // IPv4주소체계 사용
+    servAdr.sin_addr.s_addr = inet_addr(IP_ADDR); // 127.0.0.1로 루프백 주소 사용
+    servAdr.sin_port = htons(1234); // 임의로 1234번 포트 사용
+
+    // 서버와 연결
+    connect(sock, (SOCKADDR*)&servAdr, sizeof(servAdr));
+
+    // 패킷송수신 과정
+    while (1) {
+        fputs("command(q to quit): ", stdout);
+        fgets(message, sizeof(message), stdin);
+        if (!strcmp(message, "q\n")) {
+            break;
+        }
+
+        // sock : 통신에 사용할 소켓파일, message : 보내는 메세지 내용 및 크기
+        send(sock, message, strlen(message), 0);
 
 
+        strLen = recv(sock, message, sizeof(message) - 1, 0);
+        // 서버에서 보내온 문자열 데이터에 null 문자 삽입
+        message[strLen] = '\0';
+        printf("%s\n", message);
+    }
 
-	// 서버쪽에 주소정보를 만들어줌
-	memset(&servAdr, 0, sizeof(servAdr));
-	servAdr.sin_family = AF_INET; // 주소체계는 IPv4를 사용
-	servAdr.sin_addr.s_addr = htonl(INADDR_ANY); // 현재컴퓨터의 IP를 사용
-	servAdr.sin_port = htons(1234); // 열어줄 포트번호의 설정 // 여기선 임의로 1234번 포트
+    // 소켓 종료
+    // 윈도우 운영체제 상에서 소켓dll 초기화
+    closesocket(sock);
+    WSACleanup();
 
-	// 2.bind
-	// 소켓의 주소정보를 바인드. 서버소켓과 구조체를 파라미터로 입력
-	// 바인딩 실패 예외처리
-	if (bind(servSock, (SOCKADDR*)&servAdr, sizeof(servAdr)) == SOCKET_ERROR) {
-		WSACleanup();
-		fputs("binding error\n", stderr);
-		exit(1);
-	}
-	// 3. recvfrom(), sendto() 함수를 통한 패킷송수신
-
-	printf("Socket 생성 성공");
-
-	while (1)
-	{
-		clntAdrSz = sizeof(clntAdr);
-		// 서버소켓과, 데이터를 저장할 버퍼, 버퍼사이즈, 
-		strLen = recvfrom(servSock, message, BUF_SIZE, 0, (SOCKADDR*)&clntAdr, &clntAdrSz);
-		// recvfrom을 통해 클라이언트로 부터 받은 데이터를 반환
-		sendto(servSock, "hi\n", 4, 0, (SOCKADDR*)&clntAdr, sizeof(clntAdr));
-	}
-
-	// 4. socket 닫기
-	closesocket(servSock); // 소켓 종료함수
-	WSACleanup();		//윈도우상에서 지원하는 소켓초기화 함수
-	return 0;
+    return 0;
 }
