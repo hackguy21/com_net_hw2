@@ -1,0 +1,154 @@
+
+
+#undef UNICODE
+#define WIN32_LEAN_AND_MEAN
+
+#include <windows.h>
+#include <winsock2.h> 
+#include <ws2tcpip.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+// Need to link with Ws2_32.lib
+#pragma comment (lib, "Ws2_32.lib")
+// #pragma comment (lib, "Mswsock.lib")
+// 컴파일러 지시자(directive)인 #progma commment를 통해 
+// 나중에 컴파일 후 링킹과정에서 winsock library를 사용하겠다는 의미
+
+#define DEFAULT_BUFLEN 512
+#define DEFAULT_PORT "1234"
+
+
+int main(void)
+{
+    // Winsock : Microsoft에서 제공하는 윈도우 운영체제의 TCP/IP통신용 프로그래밍 인터페이스
+    // Winsock = WSA = Windows Socket API이며 
+    // 원래는 버클리 유닉스 소켓 인터페이스용으로 만들어졌고, 윈도우에서 이를 개조한것
+    WSADATA wsaData;
+    int iResult;
+
+    // TCP통신은 Listen 소켓과 Client 소켓을 따로 둔다.
+    SOCKET ListenSocket = INVALID_SOCKET; // 서버가 클라이언트 연결을 수신대기할때 쓰는 ListenSocket
+    SOCKET ClientSocket = INVALID_SOCKET;
+
+    struct addrinfo* result = NULL;
+    struct addrinfo sockaddr;
+
+    int iSendResult;
+    char recvbuf[DEFAULT_BUFLEN];
+    int recvbuflen = DEFAULT_BUFLEN;
+
+    // 0.Initialize Winsock // 윈속 초기화 및 초기화 실패시 에러 문구
+    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (iResult != 0) {
+        printf("WSAStartup failed with error: %d\n", iResult);
+        return 1;
+    }
+
+    // 1-1.서버의 소켓 생성 
+    ZeroMemory(&sockaddr, sizeof(sockaddr));
+    sockaddr.ai_family = AF_INET; // IPv4 프로토콜 사용
+    sockaddr.ai_socktype = SOCK_STREAM; // SOCK_STEAM을 통해 TCP통신방식 사용 <-> SOCK_DGRAM은 UDP
+    sockaddr.ai_protocol = IPPROTO_TCP;
+    sockaddr.ai_flags = AI_PASSIVE;
+
+    // Resolve the server address and port // 
+    iResult = getaddrinfo(NULL, DEFAULT_PORT, &sockaddr, &result);
+    // socket 생성실패시 예외처리
+    if (iResult != 0) {
+        printf("getaddrinfo failed with error: %d\n", iResult);
+        WSACleanup();
+        return 1;
+    }
+
+    // 1-2.ListenSocket 생성
+    ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+    if (ListenSocket == INVALID_SOCKET) {
+        printf("socket failed with error: %ld\n", WSAGetLastError());
+        freeaddrinfo(result);
+        WSACleanup();
+        return 1;
+    }
+
+    // 1-3 Listen Socket 바인딩
+    // Setup the TCP listening socket
+    iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
+    // 바인딩 실패시 예외처리
+    if (iResult == SOCKET_ERROR) {
+        printf("bind failed with error: %d\n", WSAGetLastError());
+        freeaddrinfo(result);
+        closesocket(ListenSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    freeaddrinfo(result);
+
+    iResult = listen(ListenSocket, SOMAXCONN);
+    if (iResult == SOCKET_ERROR) {
+        printf("listen failed with error: %d\n", WSAGetLastError());
+        closesocket(ListenSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    // 1-4 클라이언트 소켓 
+    // Accept a client socket
+    ClientSocket = accept(ListenSocket, NULL, NULL);
+    if (ClientSocket == INVALID_SOCKET) {
+        printf("accept failed with error: %d\n", WSAGetLastError());
+        closesocket(ListenSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    // 1-5 리슨소켓 종료
+    // No longer need server socket
+    closesocket(ListenSocket);
+
+    // 2 TCP 송수신 가정. recv와 send를 통한 통신
+    // Receive until the peer shuts down the connection
+    do {
+
+        iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
+        if (iResult > 0) {
+            printf("Bytes received: %d\n", iResult);
+
+            // Echo the buffer back to the sender
+            iSendResult = send(ClientSocket, recvbuf, iResult, 0);
+            if (iSendResult == SOCKET_ERROR) {
+                printf("send failed with error: %d\n", WSAGetLastError());
+                closesocket(ClientSocket);
+                WSACleanup();
+                return 1;
+            }
+            printf("Bytes sent: %d\n", iSendResult);
+        }
+        else if (iResult == 0)
+            printf("Connection closing...\n");
+        else {
+            printf("recv failed with error: %d\n", WSAGetLastError());
+            closesocket(ClientSocket);
+            WSACleanup();
+            return 1;
+        }
+
+    } while (iResult > 0);
+
+    // 3. 데이터송수신 종료 
+    // shutdown the connection since we're done
+    iResult = shutdown(ClientSocket, SD_SEND);
+    if (iResult == SOCKET_ERROR) {
+        printf("shutdown failed with error: %d\n", WSAGetLastError());
+        closesocket(ClientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    // 4.소켓, winsock 종료
+    // cleanup // 서버의 사용이 끝나고 소켓을 닫고, winsock에 대한 사용을 종료
+    closesocket(ClientSocket);
+    WSACleanup();
+
+    return 0;
+}
